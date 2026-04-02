@@ -1,0 +1,23 @@
+[project]
+name = "dummy-backend"
+version = "0.1.0"
+description = "FastAPI Todo List CRUD service backed by SQLite."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi[standard]==0.135.3",
+    "sqlmodel==0.0.37",
+]
+
+[dependency-groups]
+dev = [
+    "httpx==0.28.1",
+    "pytest==9.0.2",
+]
+
+[tool.fastapi]
+entrypoint = "app.main:app"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
