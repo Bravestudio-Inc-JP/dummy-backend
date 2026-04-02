@@ -34,6 +34,7 @@ def test_create_todo_list(client: TestClient) -> None:
     response = client.post("/todo-lists", json={"title": "Ship API"})
 
     assert response.status_code == 201
+    assert response.headers["location"].endswith("/todo-lists/1")
     body = response.json()
     assert body["title"] == "Ship API"
     assert body["description"] is None
@@ -52,7 +53,31 @@ def test_list_todo_lists_with_pagination(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert len(body) == 1
-    assert body[0]["title"] == "Second"
+    assert body[0]["title"] == "First"
+
+
+def test_list_todo_lists_can_filter_by_completion(client: TestClient) -> None:
+    client.post("/todo-lists", json={"title": "Open", "is_completed": False})
+    client.post("/todo-lists", json={"title": "Closed", "is_completed": True})
+
+    response = client.get("/todo-lists", params={"is_completed": "true"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["title"] == "Closed"
+    assert body[0]["is_completed"] is True
+
+
+def test_list_todo_lists_can_order_by_title_desc(client: TestClient) -> None:
+    client.post("/todo-lists", json={"title": "Alpha"})
+    client.post("/todo-lists", json={"title": "Zulu"})
+
+    response = client.get("/todo-lists", params={"order_by": "title_desc"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["title"] for item in body] == ["Zulu", "Alpha"]
 
 
 def test_read_single_todo_list(client: TestClient) -> None:
