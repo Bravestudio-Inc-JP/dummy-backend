@@ -52,8 +52,14 @@ def test_list_todo_lists_with_pagination(client: TestClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 1
-    assert body[0]["title"] == "First"
+    assert body["pagination"] == {
+        "offset": 1,
+        "limit": 1,
+        "total": 2,
+        "has_more": False,
+    }
+    assert len(body["items"]) == 1
+    assert body["items"][0]["title"] == "First"
 
 
 def test_list_todo_lists_can_filter_by_completion(client: TestClient) -> None:
@@ -64,9 +70,9 @@ def test_list_todo_lists_can_filter_by_completion(client: TestClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 1
-    assert body[0]["title"] == "Closed"
-    assert body[0]["is_completed"] is True
+    assert len(body["items"]) == 1
+    assert body["items"][0]["title"] == "Closed"
+    assert body["items"][0]["is_completed"] is True
 
 
 def test_list_todo_lists_can_order_by_title_desc(client: TestClient) -> None:
@@ -77,7 +83,33 @@ def test_list_todo_lists_can_order_by_title_desc(client: TestClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert [item["title"] for item in body] == ["Zulu", "Alpha"]
+    assert [item["title"] for item in body["items"]] == ["Zulu", "Alpha"]
+
+
+def test_list_todo_lists_can_search(client: TestClient) -> None:
+    client.post("/todo-lists", json={"title": "Ship backend"})
+    client.post("/todo-lists", json={"title": "Buy groceries"})
+
+    response = client.get("/todo-lists", params={"q": "Ship"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["filters"]["q"] == "Ship"
+    assert [item["title"] for item in body["items"]] == ["Ship backend"]
+
+
+def test_summary_endpoint_returns_aggregates(client: TestClient) -> None:
+    client.post("/todo-lists", json={"title": "Plan sprint", "is_completed": False})
+    client.post("/todo-lists", json={"title": "Deploy", "is_completed": True})
+
+    response = client.get("/todo-lists/summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "total": 2,
+        "completed": 1,
+        "pending": 1,
+    }
 
 
 def test_read_single_todo_list(client: TestClient) -> None:
@@ -118,10 +150,46 @@ def test_delete_todo_list(client: TestClient) -> None:
     assert get_response.status_code == 404
 
 
-@pytest.mark.parametrize("method", ["get", "patch", "delete"])
+def test_replace_todo_list(client: TestClient) -> None:
+    client.post("/todo-lists", json={"title": "Legacy"})
+
+    response = client.put(
+        "/todo-lists/1",
+        json={
+            "title": "Replacement",
+            "description": "Rewritten payload",
+            "is_completed": True,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["title"] == "Replacement"
+    assert body["description"] == "Rewritten payload"
+    assert body["is_completed"] is True
+
+
+def test_complete_and_reopen_todo_list(client: TestClient) -> None:
+    client.post("/todo-lists", json={"title": "Lifecycle"})
+
+    complete_response = client.post("/todo-lists/1/complete")
+    reopen_response = client.post("/todo-lists/1/reopen")
+
+    assert complete_response.status_code == 200
+    assert complete_response.json()["is_completed"] is True
+    assert reopen_response.status_code == 200
+    assert reopen_response.json()["is_completed"] is False
+
+
+@pytest.mark.parametrize("method", ["get", "put", "patch", "delete"])
 def test_missing_todo_list_returns_404(client: TestClient, method: str) -> None:
     request_method = getattr(client, method)
-    kwargs = {"json": {"title": "ignored"}} if method == "patch" else {}
+    if method == "patch":
+        kwargs = {"json": {"title": "ignored"}}
+    elif method == "put":
+        kwargs = {"json": {"title": "ignored"}}
+    else:
+        kwargs = {}
 
     response = request_method("/todo-lists/999", **kwargs)
 

@@ -9,7 +9,7 @@ def utc_now() -> datetime:
 
 
 class TodoListBase(SQLModel):
-    title: str = Field(index=True, max_length=255)
+    title: str = Field(index=True, min_length=1, max_length=255)
     description: Optional[str] = Field(default=None, max_length=1000)
     is_completed: bool = False
 
