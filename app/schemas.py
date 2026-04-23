@@ -40,6 +40,7 @@ class TodoListListMeta(SQLModel):
 
 class TodoListListFilters(SQLModel):
     q: Optional[str] = None
+    title_prefix: Optional[str] = None
     is_completed: Optional[bool] = None
 
 

@@ -62,6 +62,7 @@ def read_todo_lists(
     offset: int = 0,
     limit: int = Query(default=100, ge=1, le=100),
     q: str | None = Query(default=None, min_length=1, max_length=255),
+    title_prefix: str | None = Query(default=None, min_length=1, max_length=100),
     is_completed: bool | None = None,
     order_by: Literal[
         "created_at_desc",
@@ -86,6 +87,9 @@ def read_todo_lists(
                 col(TodoList.description).ilike(search_pattern),
             )
         )
+
+    if title_prefix is not None:
+        filters.append(col(TodoList.title).ilike(f"{title_prefix.strip()}%"))
 
     if is_completed is not None:
         filters.append(TodoList.is_completed == is_completed)
@@ -117,6 +121,7 @@ def read_todo_lists(
         ),
         filters=TodoListListFilters(
             q=q,
+            title_prefix=title_prefix,
             is_completed=is_completed,
         ),
     )
@@ -133,6 +138,15 @@ def read_todo_list_summary(session: Session = Depends(get_session)) -> TodoListS
         completed=completed,
         pending=pending,
     )
+
+
+@router.get("/recent", response_model=list[TodoListRead])
+def read_recent_todo_lists(
+    limit: int = Query(default=5, ge=1, le=20),
+    session: Session = Depends(get_session),
+) -> list[TodoList]:
+    statement = select(TodoList).order_by(col(TodoList.created_at).desc()).limit(limit)
+    return session.exec(statement).all()
 
 
 @router.get("/{todo_list_id}", response_model=TodoListRead)
@@ -152,13 +166,15 @@ def replace_todo_list(
     return _save_and_refresh(session, todo_list)
 
 
-@router.patch("/{todo_list_id}", response_model=TodoListRead)
+@router.patch("/{todo_list_id}", response_model=TodoListRead, status_code=status.HTTP_202_ACCEPTED)
 def update_todo_list(
     todo_list_id: int,
     todo_list_update: TodoListUpdate,
+    notify: bool = Query(default=False),
     session: Session = Depends(get_session),
 ) -> TodoList:
     todo_list = _get_todo_list_or_404(todo_list_id, session)
+    _ = notify
     update_data = todo_list_update.model_dump(exclude_unset=True)
     todo_list.sqlmodel_update(update_data)
     return _save_and_refresh(session, todo_list)
